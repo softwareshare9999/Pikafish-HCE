@@ -13,30 +13,55 @@ permissions:
 
 jobs:
   Pikafish-x86-64:
-    name: ${{ matrix.config.name }}${{ matrix.arch }}
-    runs-on: ${{ matrix.config.os }}
+    name: ${{ matrix.name }}${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
     env:
       ARCH: x86-64${{ matrix.arch }}
       COMPILER: clang++
       COMP: clang
-      EXE: pikafish${{ matrix.arch }}${{ matrix.config.ext }}
+      EXE: pikafish${{ matrix.arch }}${{ matrix.ext }}
     strategy:
       fail-fast: false
       matrix:
-        config:
+        include:
           - name: Linux
             os: ubuntu-22.04
             shell: bash
+            arch: "-avx2"
+          - name: Linux
+            os: ubuntu-22.04
+            shell: bash
+            arch: "-bmi2"
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
-        arch: ["-avx2", "-bmi2", "-avxvnni", "-avx512", "-vnni512"]
+            arch: "-avx2"
+          - name: Windows
+            os: windows-latest
+            shell: msys2 {0}
+            ext: .exe
+            arch: "-bmi2"
+          - name: Windows
+            os: windows-latest
+            shell: msys2 {0}
+            ext: .exe
+            arch: "-avxvnni"
+          - name: Windows
+            os: windows-latest
+            shell: msys2 {0}
+            ext: .exe
+            arch: "-avx512"
+          - name: Windows
+            os: windows-latest
+            shell: msys2 {0}
+            ext: .exe
+            arch: "-vnni512"
 
     defaults:
       run:
         working-directory: src
-        shell: ${{ matrix.config.shell }}
+        shell: ${{ matrix.shell }}
 
     steps:
       - uses: actions/checkout@v4
@@ -77,7 +102,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Pikafish-HCE-${{ matrix.config.name }}${{ matrix.arch }}
+          name: Pikafish-HCE-${{ matrix.name }}${{ matrix.arch }}
           path: ${{ env.EXE }}
 
   Pikafish-Linux-armv8:
@@ -112,21 +137,13 @@ jobs:
           path: ${{ env.EXE }}
 
   Pikafish-MacOS:
-    name: MacOS-${{ matrix.arch }}
-    runs-on: ${{ matrix.os }}
+    name: MacOS-apple-silicon
+    runs-on: macos-latest
     env:
-      ARCH: ${{ matrix.arch }}
+      ARCH: apple-silicon
       COMPILER: clang++
       COMP: clang
-      EXE: pikafish-${{ matrix.arch }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            arch: apple-silicon
-          - os: macos-13
-            arch: x86-64-avx2
+      EXE: pikafish-apple-silicon
     defaults:
       run:
         working-directory: src
@@ -135,7 +152,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Compile ${{ matrix.arch }} build
+      - name: Compile apple-silicon build
         run: |
           make -j profile-build EXE=$EXE
           make strip EXE=$EXE
@@ -143,26 +160,18 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Pikafish-HCE-MacOS-${{ matrix.arch }}
+          name: Pikafish-HCE-MacOS-apple-silicon
           path: ${{ env.EXE }}
 
   Pikafish-Android:
-    name: Android-${{ matrix.arch }}
+    name: Android-armv8
     runs-on: ubuntu-latest
     env:
-      ARCH: ${{ matrix.arch }}
-      COMPILER: ${{ matrix.compiler }}
+      ARCH: armv8
+      COMPILER: aarch64-linux-android21-clang++
       COMP: ndk
-      EXE: pikafish-${{ matrix.arch }}
+      EXE: pikafish-armv8
       LDFLAGS: "-static -Wno-unused-command-line-argument"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: armv8
-            compiler: aarch64-linux-android21-clang++
-          - arch: armv7-neon
-            compiler: armv7a-linux-androideabi16-clang++
     defaults:
       run:
         working-directory: src
@@ -181,7 +190,7 @@ jobs:
           ANDROID_NDK_BIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
           echo "ANDROID_NDK_BIN=$ANDROID_NDK_BIN" >> $GITHUB_ENV
 
-      - name: Compile ${{ matrix.arch }} build
+      - name: Compile armv8 build
         run: |
           export PATH=${{ env.ANDROID_NDK_BIN }}:$PATH
           make clean
@@ -191,7 +200,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Pikafish-HCE-Android-${{ matrix.arch }}
+          name: Pikafish-HCE-Android-armv8
           path: ${{ env.EXE }}
 
   Pikafish:
