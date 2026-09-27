@@ -28,35 +28,42 @@ jobs:
             os: ubuntu-22.04
             shell: bash
             arch: "-avx2"
+            target: profile-build
           - name: Linux
             os: ubuntu-22.04
             shell: bash
             arch: "-bmi2"
+            target: profile-build
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
             arch: "-avx2"
+            target: profile-build
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
             arch: "-bmi2"
+            target: profile-build
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
             arch: "-avxvnni"
+            target: build
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
             arch: "-avx512"
+            target: build
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
             arch: "-vnni512"
+            target: build
 
     defaults:
       run:
@@ -79,24 +86,9 @@ jobs:
           msystem: clang64
           install: mingw-w64-clang-x86_64-clang make git expect
 
-      - name: Download SDE package
-        if: matrix.arch == '-avxvnni' || matrix.arch == '-avx512' || matrix.arch == '-vnni512'
-        uses: petarpetrovt/setup-sde@v2.4
-        with:
-          environmentVariableName: SDE_DIR
-          sdeVersion: 9.33.0
-
       - name: Compile ${{ matrix.arch }} build
         run: |
-          SDE=""
-          if [ -n "${SDE_DIR}" ]; then
-            if [ -f "${SDE_DIR}/sde.exe" ]; then
-              SDE="${SDE_DIR}/sde.exe -future --"
-            elif [ -f "${SDE_DIR}/sde" ]; then
-              SDE="${SDE_DIR}/sde -future --"
-            fi
-          fi
-          make -j profile-build EXE=$EXE WINE_PATH="$SDE"
+          make -j ${{ matrix.target }} EXE=$EXE
           make strip EXE=$EXE
           cp $EXE ../
 
