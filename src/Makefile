@@ -796,6 +796,10 @@ endif
         config-sanity icc-profile-use icc-profile-make gcc-profile-use gcc-profile-make \
         clang-profile-use clang-profile-make
 
+# HCE builds do not download or embed an NNUE network.
+net:
+	@echo "Skipping NNUE download (HCE evaluation)."
+
 build: net config-sanity
 	$(MAKE) ARCH=$(ARCH) COMP=$(COMP) all
 

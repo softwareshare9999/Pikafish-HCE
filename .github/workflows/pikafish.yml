@@ -1,12 +1,18 @@
-name: Pikafish
+name: Pikafish-HCE
 
 on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  Pikafish:
+  Pikafish-x86-64:
     name: ${{ matrix.config.name }}${{ matrix.arch }}
     runs-on: ${{ matrix.config.os }}
     env:
@@ -14,16 +20,18 @@ jobs:
       COMPILER: clang++
       COMP: clang
       EXE: pikafish${{ matrix.arch }}${{ matrix.config.ext }}
-      SDE: ${{ matrix.config.sde }}
     strategy:
+      fail-fast: false
       matrix:
         config:
+          - name: Linux
+            os: ubuntu-22.04
+            shell: bash
           - name: Windows
             os: windows-latest
             shell: msys2 {0}
             ext: .exe
-            sde: /d/a/Pikafish-HCE/Pikafish-HCE/.output/sde-temp-files/sde-external-9.27.0-2023-09-13-win/sde.exe -future --
-        arch: ["-vnni512", "-bmi2", "-avx2", "-modern"]
+        arch: ["-avx2", "-bmi2", "-avxvnni", "-avx512", "-vnni512"]
 
     defaults:
       run:
@@ -36,8 +44,8 @@ jobs:
       - name: Install LLVM and Clang
         if: runner.os == 'Linux'
         run: |
-          sudo apt update
-          sudo apt install clang llvm
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
 
       - name: Setup msys and install required packages
         if: runner.os == 'Windows'
@@ -47,56 +55,120 @@ jobs:
           install: mingw-w64-clang-x86_64-clang make git expect
 
       - name: Download SDE package
-        if: runner.os == 'Linux' || runner.os == 'Windows'
-        uses: petarpetrovt/setup-sde@91a1a03434384e064706634125a15f7446d2aafb  # @v2.3
+        if: matrix.arch == '-avxvnni' || matrix.arch == '-avx512' || matrix.arch == '-vnni512'
+        uses: petarpetrovt/setup-sde@v2.4
         with:
           environmentVariableName: SDE_DIR
-          sdeVersion: 9.27.0
+          sdeVersion: 9.33.0
 
       - name: Compile ${{ matrix.arch }} build
         run: |
-          wget -q https://github.com/official-pikafish/Networks/releases/download/master-net/pikafish.nnue
+          SDE=""
+          if [ -n "${SDE_DIR}" ]; then
+            if [ -f "${SDE_DIR}/sde.exe" ]; then
+              SDE="${SDE_DIR}/sde.exe -future --"
+            elif [ -f "${SDE_DIR}/sde" ]; then
+              SDE="${SDE_DIR}/sde -future --"
+            fi
+          fi
           make -j profile-build EXE=$EXE WINE_PATH="$SDE"
           make strip EXE=$EXE
           cp $EXE ../
 
-      - name: Download wiki
-        run: |
-          git clone https://github.com/official-pikafish/Pikafish.wiki.git ../Wiki
-          cd ../Wiki
-          rm -rf .git
-
-      # Artifacts automatically get zipped.
-      # To avoid double-zipping, we use the unzipped directory
       - uses: actions/upload-artifact@v4
-        with:	
-          name: Pikafish-${{ matrix.config.name }}${{ matrix.arch }}
-          path: |
-            ${{ env.EXE }}
-            Wiki
-            AUTHORS
-            CONTRIBUTING.md
-            Copying.txt
-            README.md
-            Top CPU Contributors.txt
-  Pikafish-Android:
-    name: Android-${{ matrix.arch }}
-    runs-on: ubuntu-latest
+        with:
+          name: Pikafish-HCE-${{ matrix.config.name }}${{ matrix.arch }}
+          path: ${{ env.EXE }}
+
+  Pikafish-Linux-armv8:
+    name: Linux-armv8
+    runs-on: ubuntu-24.04-arm
     env:
-      ARCH: ${{ matrix.arch }}
-      COMPILER: aarch64-linux-android21-clang++
-      COMP: ndk
-      EXE: pikafish-${{ matrix.arch }}
-      LDFLAGS: "-static -Wno-unused-command-line-argument"
-    strategy:
-      matrix:
-        arch: ["armv8"]
+      ARCH: armv8
+      COMPILER: clang++
+      COMP: clang
+      EXE: pikafish-armv8
     defaults:
       run:
         working-directory: src
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM and Clang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm
+
+      - name: Compile armv8 build
+        run: |
+          make -j profile-build EXE=$EXE
+          make strip EXE=$EXE
+          cp $EXE ../
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pikafish-HCE-Linux-armv8
+          path: ${{ env.EXE }}
+
+  Pikafish-MacOS:
+    name: MacOS-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    env:
+      ARCH: ${{ matrix.arch }}
+      COMPILER: clang++
+      COMP: clang
+      EXE: pikafish-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            arch: apple-silicon
+          - os: macos-13
+            arch: x86-64-avx2
+    defaults:
+      run:
+        working-directory: src
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile ${{ matrix.arch }} build
+        run: |
+          make -j profile-build EXE=$EXE
+          make strip EXE=$EXE
+          cp $EXE ../
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pikafish-HCE-MacOS-${{ matrix.arch }}
+          path: ${{ env.EXE }}
+
+  Pikafish-Android:
+    name: Android-${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    env:
+      ARCH: ${{ matrix.arch }}
+      COMPILER: ${{ matrix.compiler }}
+      COMP: ndk
+      EXE: pikafish-${{ matrix.arch }}
+      LDFLAGS: "-static -Wno-unused-command-line-argument"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: armv8
+            compiler: aarch64-linux-android21-clang++
+          - arch: armv7-neon
+            compiler: armv7a-linux-androideabi16-clang++
+    defaults:
+      run:
+        working-directory: src
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Install NDK
         run: |
@@ -108,20 +180,60 @@ jobs:
           ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/$NDKV
           ANDROID_NDK_BIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
           echo "ANDROID_NDK_BIN=$ANDROID_NDK_BIN" >> $GITHUB_ENV
+
       - name: Compile ${{ matrix.arch }} build
         run: |
           export PATH=${{ env.ANDROID_NDK_BIN }}:$PATH
           make clean
           make -j build EXE=$EXE
           make strip EXE=$EXE
-      - name: Copy binary to folder
+          cp $EXE ../
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pikafish-HCE-Android-${{ matrix.arch }}
+          path: ${{ env.EXE }}
+
+  Pikafish:
+    name: Pikafish-HCE
+    runs-on: ubuntu-latest
+    needs: [Pikafish-x86-64, Pikafish-Linux-armv8, Pikafish-MacOS, Pikafish-Android]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Pikafish-HCE-*
+          path: Artifacts
+
+      - name: Put binaries into OS-specific directories
         run: |
-          cd ..
-          mkdir Android
-          cp src/$EXE Android
-      - uses: actions/upload-artifact@v3
-        with:	
-          name: Pikafish	
+          mkdir -p Windows Linux MacOS Android
+          mv Artifacts/Pikafish-HCE-Windows-*/* Windows
+          mv Artifacts/Pikafish-HCE-Linux-*/* Linux
+          mv Artifacts/Pikafish-HCE-MacOS-*/* MacOS
+          mv Artifacts/Pikafish-HCE-Android-*/* Android
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Pikafish-HCE
           path: |
-            Android/*
+            Windows
+            Linux
+            MacOS
+            Android
             AUTHORS
+            Copying.txt
+            README.md
+            Top CPU Contributors.txt
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            Windows/* Linux/* MacOS/* Android/* \
+            --title "Pikafish-HCE ${{ github.ref_name }}" \
+            --generate-notes
